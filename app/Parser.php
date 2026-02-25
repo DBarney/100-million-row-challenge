@@ -107,7 +107,7 @@ final class Parser
         echo "Worker times:" . PHP_EOL;
         for ($i = 0; $i < self::NUM_WORKERS; $i++) {
             $t = $workerTimings[$i];
-            echo "  Worker $i:     " . number_format($t['total'], 3) . "s (" . number_format($t['lines']) . " lines, template: " . number_format($t['template'], 3) . "s, path: " . number_format($t['path'], 3) . "s, key: " . number_format($t['key'], 3) . "s, agg: " . number_format($t['agg'], 3) . "s, filter: " . number_format($t['filter'], 3) . "s)" . PHP_EOL;
+            echo "  Worker $i:     " . number_format($t['total'], 3) . "s (" . number_format($t['lines']) . " lines, fileRead: " . number_format($t['fileRead'], 3) . "s, fileSeek: " . number_format($t['fileSeek'], 3) . "s, template: " . number_format($t['template'], 3) . "s, path: " . number_format($t['path'], 3) . "s, key: " . number_format($t['key'], 3) . "s, agg: " . number_format($t['agg'], 3) . "s, filter: " . number_format($t['filter'], 3) . "s)" . PHP_EOL;
         }
         echo "===========================" . PHP_EOL;
     }
@@ -134,19 +134,44 @@ final class Parser
         $keyExtractTime = 0;
         $aggTime = 0;
         $linesProcessed = 0;
+        $fileReadTime = 0;
+        $fileSeekTime = 0;
 
         $allPathsFound = false;
         $linesSinceLastNew = 0;
 
+        $tFile = microtime(true);
         $handle = fopen($inputPath, 'r');
+        $fileReadTime += microtime(true) - $tFile;
+
+        $tFile = microtime(true);
         fseek($handle, $startByte);
+        $fileSeekTime += microtime(true) - $tFile;
 
         // ignore partial lines, as they will have been picked up by the previous worker.
         if ($startByte > 0) {
+            $tFile = microtime(true);
             fgets($handle);
+            $fileReadTime += microtime(true) - $tFile;
         }
 
-        while (ftell($handle) <= $endByte && ($line = fgets($handle)) !== false) {
+        while (true) {
+            $tFile = microtime(true);
+            $pos = ftell($handle);
+            $fileSeekTime += microtime(true) - $tFile;
+
+            if ($pos > $endByte) {
+                break;
+            }
+
+            $tFile = microtime(true);
+            $line = fgets($handle);
+            $fileReadTime += microtime(true) - $tFile;
+
+            if ($line === false) {
+                break;
+            }
+
             $lineLen = strlen($line);
             if ($lineLen < 30) {
                 continue;
@@ -204,7 +229,9 @@ final class Parser
                 'key' => $keyExtractTime,
                 'agg' => $aggTime,
                 'filter' => $filterTime,
-                'lines' => $linesProcessed
+                'lines' => $linesProcessed,
+                'fileRead' => $fileReadTime,
+                'fileSeek' => $fileSeekTime
             ]
         ];
     }
