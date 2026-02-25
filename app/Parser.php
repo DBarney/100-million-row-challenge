@@ -46,6 +46,7 @@ final class Parser
 
         $mergedData = [];
         $mergedOrder = [];
+        $workerTimings = [];
 
         for ($i = 0; $i < self::NUM_WORKERS; $i++) {
             $data = '';
@@ -56,6 +57,8 @@ final class Parser
             pcntl_waitpid($pids[$i], $status);
 
             $result = unserialize($data);
+            $workerTimings[$i] = $result['timing'];
+
             foreach ($result['order'] as $path) {
                 if (!isset($mergedData[$path])) {
                     $mergedData[$path] = [];
@@ -95,14 +98,21 @@ final class Parser
         echo "\n=== Parser Performance ===" . PHP_EOL;
         echo "Total time:     " . number_format($totalTime, 3) . "s" . PHP_EOL;
         echo "Peak memory:    " . number_format($peakMemory / 1024 / 1024, 2) . " MB" . PHP_EOL;
+        echo "Worker times:" . PHP_EOL;
+        for ($i = 0; $i < self::NUM_WORKERS; $i++) {
+            $t = $workerTimings[$i];
+            echo "  Worker $i:     " . number_format($t['total'], 3) . "s (template: " . number_format($t['template'], 3) . "s, path: " . number_format($t['path'], 3) . "s, key: " . number_format($t['key'], 3) . "s, agg: " . number_format($t['agg'], 3) . "s, filter: " . number_format($t['filter'], 3) . "s)" . PHP_EOL;
+        }
         echo "===========================" . PHP_EOL;
     }
 
     private function processChunk(string $inputPath, int $startByte, int $endByte): array
     {
-        $order = [];
-        $data = [];
+        $startTime = microtime(true);
 
+        $order = [];
+
+        $t0 = microtime(true);
         $dateTemplate = [];
         for ($year = 2021; $year <= 2026; $year++) {
             for ($month = 1; $month <= 12; $month++) {
@@ -112,10 +122,19 @@ final class Parser
                 }
             }
         }
+        $templateTime = microtime(true) - $t0;
+
+        $pathExtractTime = 0;
+        $keyExtractTime = 0;
+        $aggTime = 0;
+
+        $allPathsFound = false;
+        $linesSinceLastNew = 0;
 
         $handle = fopen($inputPath, 'r');
         fseek($handle, $startByte);
 
+        // ignore partial lines, as they will have been picked up by the previous worker.
         if ($startByte > 0) {
             fgets($handle);
         }
@@ -126,27 +145,57 @@ final class Parser
                 continue;
             }
 
+            $t1 = microtime(true);
             $path = substr($line, 19, $lineLen - 46);
-            $date = substr($line, $lineLen - 26, 10);
+            $pathExtractTime += microtime(true) - $t1;
 
-            if (!isset($data[$path])) {
-                $data[$path] = $dateTemplate;
-                $order[] = $path;
+            $t2 = microtime(true);
+            $date = substr($line, $lineLen - 26, 10);
+            $keyExtractTime += microtime(true) - $t2;
+
+            $t3 = microtime(true);
+            if (!$allPathsFound) {
+                if (!isset($$path)) {
+                    $$path = $dateTemplate;
+                    $order[] = $path;
+                    $linesSinceLastNew = 0;
+                } else {
+                    $linesSinceLastNew++;
+                }
+                if ($linesSinceLastNew > 2000) {
+                    $allPathsFound = true;
+                }
             }
-            $data[$path][$date]++;
+            $$path[$date]++;
+            $aggTime += microtime(true) - $t3;
         }
 
         fclose($handle);
 
+        $t4 = microtime(true);
         $filteredData = [];
-        foreach ($data as $path => $dates) {
-            foreach ($dates as $date => $count) {
+        foreach ($order as $path) {
+            foreach ($$path as $date => $count) {
                 if ($count > 0) {
                     $filteredData[$path][$date] = $count;
                 }
             }
         }
+        $filterTime = microtime(true) - $t4;
 
-        return ['data' => $filteredData, 'order' => $order];
+        $endTime = microtime(true);
+
+        return [
+            'data' => $filteredData,
+            'order' => $order,
+            'timing' => [
+                'total' => $endTime - $startTime,
+                'template' => $templateTime,
+                'path' => $pathExtractTime,
+                'key' => $keyExtractTime,
+                'agg' => $aggTime,
+                'filter' => $filterTime
+            ]
+        ];
     }
 }
