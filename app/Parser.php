@@ -95,13 +95,19 @@ final class Parser
 
         $totalTime = $endTime - $startTime;
 
+        $totalLines = 0;
+        foreach ($workerTimings as $t) {
+            $totalLines += $t['lines'];
+        }
+
         echo "\n=== Parser Performance ===" . PHP_EOL;
         echo "Total time:     " . number_format($totalTime, 3) . "s" . PHP_EOL;
+        echo "Total lines:    " . number_format($totalLines) . PHP_EOL;
         echo "Peak memory:    " . number_format($peakMemory / 1024 / 1024, 2) . " MB" . PHP_EOL;
         echo "Worker times:" . PHP_EOL;
         for ($i = 0; $i < self::NUM_WORKERS; $i++) {
             $t = $workerTimings[$i];
-            echo "  Worker $i:     " . number_format($t['total'], 3) . "s (template: " . number_format($t['template'], 3) . "s, path: " . number_format($t['path'], 3) . "s, key: " . number_format($t['key'], 3) . "s, agg: " . number_format($t['agg'], 3) . "s, filter: " . number_format($t['filter'], 3) . "s)" . PHP_EOL;
+            echo "  Worker $i:     " . number_format($t['total'], 3) . "s (" . number_format($t['lines']) . " lines, template: " . number_format($t['template'], 3) . "s, path: " . number_format($t['path'], 3) . "s, key: " . number_format($t['key'], 3) . "s, agg: " . number_format($t['agg'], 3) . "s, filter: " . number_format($t['filter'], 3) . "s)" . PHP_EOL;
         }
         echo "===========================" . PHP_EOL;
     }
@@ -127,6 +133,7 @@ final class Parser
         $pathExtractTime = 0;
         $keyExtractTime = 0;
         $aggTime = 0;
+        $linesProcessed = 0;
 
         $allPathsFound = false;
         $linesSinceLastNew = 0;
@@ -144,6 +151,8 @@ final class Parser
             if ($lineLen < 30) {
                 continue;
             }
+
+            $linesProcessed++;
 
             $t1 = microtime(true);
             $path = substr($line, 19, $lineLen - 46);
@@ -194,7 +203,8 @@ final class Parser
                 'path' => $pathExtractTime,
                 'key' => $keyExtractTime,
                 'agg' => $aggTime,
-                'filter' => $filterTime
+                'filter' => $filterTime,
+                'lines' => $linesProcessed
             ]
         ];
     }
