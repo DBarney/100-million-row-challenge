@@ -136,6 +136,7 @@ final class Parser
         $linesProcessed = 0;
         $fileReadTime = 0;
         $fileSeekTime = 0;
+        $bytesProcessed = 0;
 
         $allPathsFound = false;
         $linesSinceLastNew = 0;
@@ -151,19 +152,13 @@ final class Parser
         // ignore partial lines, as they will have been picked up by the previous worker.
         if ($startByte > 0) {
             $tFile = microtime(true);
-            fgets($handle);
+            $line = fgets($handle);
+            $lineLen = strlen($line);
+            $bytesProcessed += $lineLen;
             $fileReadTime += microtime(true) - $tFile;
         }
 
-        while (true) {
-            $tFile = microtime(true);
-            $pos = ftell($handle);
-            $fileSeekTime += microtime(true) - $tFile;
-
-            if ($pos > $endByte) {
-                break;
-            }
-
+        while ($bytesProcessed < ($endByte - $startByte)) {
             $tFile = microtime(true);
             $line = fgets($handle);
             $fileReadTime += microtime(true) - $tFile;
@@ -173,6 +168,8 @@ final class Parser
             }
 
             $lineLen = strlen($line);
+            $bytesProcessed += $lineLen;
+
             if ($lineLen < 30) {
                 continue;
             }
