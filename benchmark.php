@@ -2,9 +2,19 @@
 
 error_reporting(0);
 
-$iterations = 1000000000;
+$iterations = 100000000;
 
 echo "=== Array Access vs Variable Variables ===\n\n";
+
+$a = [];
+$a['foo'] = 0;
+
+$t0 = microtime(true);
+for ($i = 0; $i < $iterations; $i++) {
+    $a['foo']++;
+}
+$t1 = microtime(true);
+echo "Single array:   " . number_format($t1 - $t0, 4) . "s val:".$a['foo'] ." \n";
 
 $a = [];
 $a['foo'] = [];
