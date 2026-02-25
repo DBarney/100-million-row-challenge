@@ -27,7 +27,7 @@ for ($i = 0; $i < $iterations; $i++) {
 $t1 = microtime(true);
 echo "Nested array:   " . number_format($t1 - $t0, 4) . "s val:".$a['foo']['2024-01-15'] ." \n";
 
-$b = '/foo/asdf/wer.html-2024-01-15';
+$b = '/foo/asdf/wer.html,2024-01-15';
 
 $t0 = microtime(true);
 for ($i = 0; $i < $iterations; $i++) {
@@ -35,4 +35,6 @@ for ($i = 0; $i < $iterations; $i++) {
 }
 $t1 = microtime(true);
 echo "variable variables:   " . number_format($t1 - $t0, 4) . "s val:". $$b ."\n";
+$arr = get_defined_vars();
+print_r($arr);
 
