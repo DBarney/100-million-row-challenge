@@ -90,8 +90,7 @@ final class Parser
 
     private function extractPath(string $url): string
     {
-        $parsed = parse_url($url);
-        return $parsed['path'] ?? '';
+        return substr($url, 21);
     }
 
     private function extractDate(string $timestamp): string
