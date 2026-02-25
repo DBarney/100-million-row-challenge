@@ -9,11 +9,10 @@ final class Parser
         $startTime = microtime(true);
         $startMemory = memory_get_usage(true);
 
-        $data = [];
         $order = [];
 
         $pathExtractTime = 0;
-        $dateExtractTime = 0;
+        $keyExtractTime = 0;
         $aggTime = 0;
 
         // Generate all dates from 2021-01-01 to 2026-12-31
@@ -44,25 +43,22 @@ final class Parser
 
             $t1 = microtime(true);
             $date = substr($line, $lineLen - 26, 10);
-            $dateExtractTime += microtime(true) - $t1;
+            $keyExtractTime += microtime(true) - $t1;
 
             $t2 = microtime(true);
-            if ($allPathsFound) {
-                $data[$path][$date]++;
-            } else {
-                if (!isset($data[$path])) {
-                    $data[$path] = $dateTemplate;
+            if (!$allPathsFound) {
+                if (!isset($$path)) {
+                    $$path = $dateTemplate;
                     $order[] = $path;
                     $linesSinceLastNew = 0;
                 } else {
                     $linesSinceLastNew++;
                 }
-                $data[$path][$date]++;
-
                 if ($linesSinceLastNew > 2000) {
                     $allPathsFound = true;
                 }
             }
+            $$path[$date]++;
             $aggTime += microtime(true) - $t2;
         }
         fclose($handle);
@@ -71,17 +67,18 @@ final class Parser
         $readMemory = memory_get_usage(true);
 
         // Filter out zero counts
-        foreach ($data as $path => &$dates) {
-            $dates = array_filter($dates, fn($count) => $count > 0);
+        foreach ($order as $path) {
+            $dates = [];
+            foreach ($$path as $date => $count) {
+                if ($count > 0) {
+                    $dates[$date] = $count;
+                }
+            }
             ksort($dates, SORT_STRING);
+            $output[$path] = $dates;
         }
 
         $sortTime = microtime(true);
-
-        $output = [];
-        foreach ($order as $path) {
-            $output[$path] = $data[$path];
-        }
 
         $json = json_encode($output, JSON_PRETTY_PRINT);
         file_put_contents($outputPath, $json);
@@ -101,7 +98,7 @@ final class Parser
         echo "Template gen:   " . number_format($templateOnly, 3) . "s" . PHP_EOL;
         echo "Read time:      " . number_format($readTimeOnly, 3) . "s" . PHP_EOL;
         echo "  - path:       " . number_format($pathExtractTime, 3) . "s" . PHP_EOL;
-        echo "  - date:       " . number_format($dateExtractTime, 3) . "s" . PHP_EOL;
+        echo "  - key:       " . number_format($keyExtractTime, 3) . "s" . PHP_EOL;
         echo "  - agg:         " . number_format($aggTime, 3) . "s" . PHP_EOL;
         echo "Sort/filter:    " . number_format($sortTimeOnly, 3) . "s" . PHP_EOL;
         echo "Write time:     " . number_format($writeTime, 3) . "s" . PHP_EOL;
