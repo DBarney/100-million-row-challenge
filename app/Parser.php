@@ -6,6 +6,9 @@ final class Parser
 {
     public function parse(string $inputPath, string $outputPath): void
     {
+        $startTime = microtime(true);
+        $startMemory = memory_get_usage(true);
+
         $data = [];
         $order = [];
 
@@ -36,9 +39,14 @@ final class Parser
         }
         fclose($handle);
 
+        $readTime = microtime(true);
+        $readMemory = memory_get_usage(true);
+
         foreach ($data as $path => &$dates) {
             ksort($dates, SORT_STRING);
         }
+
+        $sortTime = microtime(true);
 
         $output = [];
         foreach ($order as $path) {
@@ -47,6 +55,23 @@ final class Parser
 
         $json = json_encode($output, JSON_PRETTY_PRINT);
         file_put_contents($outputPath, $json);
+
+        $endTime = microtime(true);
+        $endMemory = memory_get_usage(true);
+
+        $totalTime = $endTime - $startTime;
+        $readTimeOnly = $readTime - $startTime;
+        $sortTimeOnly = $sortTime - $readTime;
+        $writeTime = $endTime - $sortTime;
+        $peakMemory = memory_get_peak_usage(true);
+
+        echo "\n=== Parser Performance ===" . PHP_EOL;
+        echo "Total time:     " . number_format($totalTime, 3) . "s" . PHP_EOL;
+        echo "Read time:      " . number_format($readTimeOnly, 3) . "s" . PHP_EOL;
+        echo "Sort time:      " . number_format($sortTimeOnly, 3) . "s" . PHP_EOL;
+        echo "Write time:     " . number_format($writeTime, 3) . "s" . PHP_EOL;
+        echo "Peak memory:    " . number_format($peakMemory / 1024 / 1024, 2) . " MB" . PHP_EOL;
+        echo "===========================" . PHP_EOL;
     }
 
     private function extractPath(string $url): string
