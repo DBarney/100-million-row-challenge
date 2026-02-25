@@ -18,21 +18,18 @@ final class Parser
 
         $handle = fopen($inputPath, 'r');
         while (($line = fgets($handle)) !== false) {
-            $line = trim($line);
-            if ($line === '') {
+            if ($line[0] === "\n") {
                 continue;
             }
 
             $commaPos = strpos($line, ',');
-            $url = substr($line, 0, $commaPos);
-            $timestamp = substr($line, $commaPos + 1);
 
             $t0 = microtime(true);
-            $path = $this->extractPath($url);
+            $path = substr($line, 19, $commaPos - 19);
             $pathExtractTime += microtime(true) - $t0;
 
             $t1 = microtime(true);
-            $date = $this->extractDate($timestamp);
+            $date = substr($line, $commaPos + 1, 10);
             $dateExtractTime += microtime(true) - $t1;
 
             $t2 = microtime(true);
@@ -41,11 +38,12 @@ final class Parser
                 $order[] = $path;
             }
 
-            if (!isset($data[$path][$date])) {
-                $data[$path][$date] = 0;
+            $pathData = &$data[$path];
+            if (!isset($pathData[$date])) {
+                $pathData[$date] = 0;
             }
 
-            $data[$path][$date]++;
+            $pathData[$date]++;
             $aggTime += microtime(true) - $t2;
         }
         fclose($handle);
@@ -86,15 +84,5 @@ final class Parser
         echo "Write time:     " . number_format($writeTime, 3) . "s" . PHP_EOL;
         echo "Peak memory:    " . number_format($peakMemory / 1024 / 1024, 2) . " MB" . PHP_EOL;
         echo "===========================" . PHP_EOL;
-    }
-
-    private function extractPath(string $url): string
-    {
-        return substr($url, 21);
-    }
-
-    private function extractDate(string $timestamp): string
-    {
-        return substr($timestamp, 0, 10);
     }
 }
