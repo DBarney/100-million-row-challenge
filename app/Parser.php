@@ -18,18 +18,17 @@ final class Parser
 
         $handle = fopen($inputPath, 'r');
         while (($line = fgets($handle)) !== false) {
-            if ($line[0] === "\n") {
+            $lineLen = strlen($line);
+            if ($lineLen < 30) {
                 continue;
             }
 
-            $commaPos = strpos($line, ',');
-
             $t0 = microtime(true);
-            $path = substr($line, 19, $commaPos - 19);
+            $path = substr($line, 19, $lineLen - 46);
             $pathExtractTime += microtime(true) - $t0;
 
             $t1 = microtime(true);
-            $date = substr($line, $commaPos + 1, 10);
+            $date = substr($line, $lineLen - 26, 10);
             $dateExtractTime += microtime(true) - $t1;
 
             $t2 = microtime(true);
