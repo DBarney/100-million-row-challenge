@@ -12,6 +12,10 @@ final class Parser
         $data = [];
         $order = [];
 
+        $pathExtractTime = 0;
+        $dateExtractTime = 0;
+        $aggTime = 0;
+
         $handle = fopen($inputPath, 'r');
         while (($line = fgets($handle)) !== false) {
             $line = trim($line);
@@ -23,9 +27,15 @@ final class Parser
             $url = substr($line, 0, $commaPos);
             $timestamp = substr($line, $commaPos + 1);
 
+            $t0 = microtime(true);
             $path = $this->extractPath($url);
-            $date = $this->extractDate($timestamp);
+            $pathExtractTime += microtime(true) - $t0;
 
+            $t1 = microtime(true);
+            $date = $this->extractDate($timestamp);
+            $dateExtractTime += microtime(true) - $t1;
+
+            $t2 = microtime(true);
             if (!isset($data[$path])) {
                 $data[$path] = [];
                 $order[] = $path;
@@ -36,6 +46,7 @@ final class Parser
             }
 
             $data[$path][$date]++;
+            $aggTime += microtime(true) - $t2;
         }
         fclose($handle);
 
@@ -68,6 +79,9 @@ final class Parser
         echo "\n=== Parser Performance ===" . PHP_EOL;
         echo "Total time:     " . number_format($totalTime, 3) . "s" . PHP_EOL;
         echo "Read time:      " . number_format($readTimeOnly, 3) . "s" . PHP_EOL;
+        echo "  - path:       " . number_format($pathExtractTime, 3) . "s" . PHP_EOL;
+        echo "  - date:       " . number_format($dateExtractTime, 3) . "s" . PHP_EOL;
+        echo "  - agg:         " . number_format($aggTime, 3) . "s" . PHP_EOL;
         echo "Sort time:      " . number_format($sortTimeOnly, 3) . "s" . PHP_EOL;
         echo "Write time:     " . number_format($writeTime, 3) . "s" . PHP_EOL;
         echo "Peak memory:    " . number_format($peakMemory / 1024 / 1024, 2) . " MB" . PHP_EOL;
