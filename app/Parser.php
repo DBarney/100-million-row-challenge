@@ -4,18 +4,105 @@ namespace App;
 
 final class Parser
 {
+    private const NUM_WORKERS = 4;
+
     public function parse(string $inputPath, string $outputPath): void
     {
         $startTime = microtime(true);
-        $startMemory = memory_get_usage(true);
 
+        $fileSize = filesize($inputPath);
+        $chunkSize = (int) ceil($fileSize / self::NUM_WORKERS);
+
+        $pids = [];
+        $pipes = [];
+
+        for ($i = 0; $i < self::NUM_WORKERS; $i++) {
+            $startByte = $i * $chunkSize;
+            $endByte = ($i + 1) * $chunkSize - 1;
+
+            $pipes[$i] = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+            if ($pipes[$i] === false) {
+                die("pipe failed");
+            }
+
+            stream_set_chunk_size($pipes[$i][0], 1024 * 1024);
+            stream_set_chunk_size($pipes[$i][1], 1024 * 1024);
+
+            $pid = pcntl_fork();
+            if ($pid === -1) {
+                die("fork failed");
+            } elseif ($pid === 0) {
+                fclose($pipes[$i][0]);
+                $result = $this->processChunk($inputPath, $startByte, $endByte);
+                $serialized = serialize($result);
+                fwrite($pipes[$i][1], $serialized);
+                fclose($pipes[$i][1]);
+                exit(0);
+            } else {
+                $pids[$i] = $pid;
+                fclose($pipes[$i][1]);
+            }
+        }
+
+        $mergedData = [];
+        $mergedOrder = [];
+
+        for ($i = 0; $i < self::NUM_WORKERS; $i++) {
+            $data = '';
+            while (!feof($pipes[$i][0])) {
+                $data .= fread($pipes[$i][0], 8192);
+            }
+            fclose($pipes[$i][0]);
+            pcntl_waitpid($pids[$i], $status);
+
+            $result = unserialize($data);
+            foreach ($result['order'] as $path) {
+                if (!isset($mergedData[$path])) {
+                    $mergedData[$path] = [];
+                    $mergedOrder[] = $path;
+                }
+                foreach ($result['data'][$path] as $date => $count) {
+                    if ($count > 0) {
+                        if (!isset($mergedData[$path][$date])) {
+                            $mergedData[$path][$date] = $count;
+                        } else {
+                            $mergedData[$path][$date] += $count;
+                        }
+                    }
+                }
+            }
+        }
+
+        foreach ($mergedData as $path => &$dates) {
+            ksort($dates, SORT_STRING);
+        }
+
+        $sortTime = microtime(true);
+
+        $output = [];
+        foreach ($mergedOrder as $path) {
+            $output[$path] = $mergedData[$path];
+        }
+
+        $json = json_encode($output, JSON_PRETTY_PRINT);
+        file_put_contents($outputPath, $json);
+
+        $endTime = microtime(true);
+        $peakMemory = memory_get_peak_usage(true);
+
+        $totalTime = $endTime - $startTime;
+
+        echo "\n=== Parser Performance ===" . PHP_EOL;
+        echo "Total time:     " . number_format($totalTime, 3) . "s" . PHP_EOL;
+        echo "Peak memory:    " . number_format($peakMemory / 1024 / 1024, 2) . " MB" . PHP_EOL;
+        echo "===========================" . PHP_EOL;
+    }
+
+    private function processChunk(string $inputPath, int $startByte, int $endByte): array
+    {
         $order = [];
+        $data = [];
 
-        $pathExtractTime = 0;
-        $keyExtractTime = 0;
-        $aggTime = 0;
-
-        // Generate all dates from 2021-01-01 to 2026-12-31
         $dateTemplate = [];
         for ($year = 2021; $year <= 2026; $year++) {
             for ($month = 1; $month <= 12; $month++) {
@@ -26,83 +113,40 @@ final class Parser
             }
         }
 
-        $templateTime = microtime(true);
-
-        $allPathsFound = false;
-        $linesSinceLastNew = 0;
         $handle = fopen($inputPath, 'r');
-        while (($line = fgets($handle)) !== false) {
+        fseek($handle, $startByte);
+
+        if ($startByte > 0) {
+            fgets($handle);
+        }
+
+        while (ftell($handle) <= $endByte && ($line = fgets($handle)) !== false) {
             $lineLen = strlen($line);
             if ($lineLen < 30) {
                 continue;
             }
 
-            $t0 = microtime(true);
             $path = substr($line, 19, $lineLen - 46);
-            $pathExtractTime += microtime(true) - $t0;
-
-            $t1 = microtime(true);
             $date = substr($line, $lineLen - 26, 10);
-            $keyExtractTime += microtime(true) - $t1;
 
-            $t2 = microtime(true);
-            if (!$allPathsFound) {
-                if (!isset($$path)) {
-                    $$path = $dateTemplate;
-                    $order[] = $path;
-                    $linesSinceLastNew = 0;
-                } else {
-                    $linesSinceLastNew++;
-                }
-                if ($linesSinceLastNew > 2000) {
-                    $allPathsFound = true;
-                }
+            if (!isset($data[$path])) {
+                $data[$path] = $dateTemplate;
+                $order[] = $path;
             }
-            $$path[$date]++;
-            $aggTime += microtime(true) - $t2;
+            $data[$path][$date]++;
         }
+
         fclose($handle);
 
-        $readTime = microtime(true);
-        $readMemory = memory_get_usage(true);
-
-        // Filter out zero counts
-        foreach ($order as $path) {
-            $dates = [];
-            foreach ($$path as $date => $count) {
+        $filteredData = [];
+        foreach ($data as $path => $dates) {
+            foreach ($dates as $date => $count) {
                 if ($count > 0) {
-                    $dates[$date] = $count;
+                    $filteredData[$path][$date] = $count;
                 }
             }
-            ksort($dates, SORT_STRING);
-            $output[$path] = $dates;
         }
 
-        $sortTime = microtime(true);
-
-        $json = json_encode($output, JSON_PRETTY_PRINT);
-        file_put_contents($outputPath, $json);
-
-        $endTime = microtime(true);
-        $endMemory = memory_get_usage(true);
-
-        $totalTime = $endTime - $startTime;
-        $templateOnly = $templateTime - $startTime;
-        $readTimeOnly = $readTime - $templateTime;
-        $sortTimeOnly = $sortTime - $readTime;
-        $writeTime = $endTime - $sortTime;
-        $peakMemory = memory_get_peak_usage(true);
-
-        echo "\n=== Parser Performance ===" . PHP_EOL;
-        echo "Total time:     " . number_format($totalTime, 3) . "s" . PHP_EOL;
-        echo "Template gen:   " . number_format($templateOnly, 3) . "s" . PHP_EOL;
-        echo "Read time:      " . number_format($readTimeOnly, 3) . "s" . PHP_EOL;
-        echo "  - path:       " . number_format($pathExtractTime, 3) . "s" . PHP_EOL;
-        echo "  - key:       " . number_format($keyExtractTime, 3) . "s" . PHP_EOL;
-        echo "  - agg:         " . number_format($aggTime, 3) . "s" . PHP_EOL;
-        echo "Sort/filter:    " . number_format($sortTimeOnly, 3) . "s" . PHP_EOL;
-        echo "Write time:     " . number_format($writeTime, 3) . "s" . PHP_EOL;
-        echo "Peak memory:    " . number_format($peakMemory / 1024 / 1024, 2) . " MB" . PHP_EOL;
-        echo "===========================" . PHP_EOL;
+        return ['data' => $filteredData, 'order' => $order];
     }
 }
