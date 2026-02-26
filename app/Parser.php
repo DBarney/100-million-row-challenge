@@ -141,27 +141,27 @@ final class Parser
         $allPathsFound = false;
         $linesSinceLastNew = 0;
 
-        $tFile = microtime(true);
+        // $tFile = microtime(true);
         $handle = fopen($inputPath, 'r');
-        $fileReadTime += microtime(true) - $tFile;
+        // $fileReadTime += microtime(true) - $tFile;
 
-        $tFile = microtime(true);
+        // $tFile = microtime(true);
         fseek($handle, $startByte);
-        $fileSeekTime += microtime(true) - $tFile;
+        // $fileSeekTime += microtime(true) - $tFile;
 
         // ignore partial lines, as they will have been picked up by the previous worker.
         if ($startByte > 0) {
-            $tFile = microtime(true);
+            // $tFile = microtime(true);
             $line = fgets($handle);
             $lineLen = strlen($line);
             $bytesProcessed += $lineLen;
-            $fileReadTime += microtime(true) - $tFile;
+            // $fileReadTime += microtime(true) - $tFile;
         }
 
         while ($bytesProcessed < ($endByte - $startByte)) {
-            $tFile = microtime(true);
+            // $tFile = microtime(true);
             $line = fgets($handle);
-            $fileReadTime += microtime(true) - $tFile;
+            // $fileReadTime += microtime(true) - $tFile;
 
             if ($line === false) {
                 break;
@@ -176,15 +176,15 @@ final class Parser
 
             $linesProcessed++;
 
-            $t1 = microtime(true);
+            // $t1 = microtime(true);
             $path = substr($line, 19, $lineLen - 46);
-            $pathExtractTime += microtime(true) - $t1;
+            // $pathExtractTime += microtime(true) - $t1;
 
-            $t2 = microtime(true);
+            // $t2 = microtime(true);
             $date = substr($line, $lineLen - 26, 10);
-            $keyExtractTime += microtime(true) - $t2;
+            // $keyExtractTime += microtime(true) - $t2;
 
-            $t3 = microtime(true);
+            // $t3 = microtime(true);
             if (!$allPathsFound) {
                 if (!isset($$path)) {
                     $$path = $dateTemplate;
@@ -198,7 +198,7 @@ final class Parser
                 }
             }
             $$path[$date]++;
-            $aggTime += microtime(true) - $t3;
+            // $aggTime += microtime(true) - $t3;
         }
 
         fclose($handle);
